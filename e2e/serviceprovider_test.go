@@ -11,6 +11,8 @@ import (
 
 func TestServiceProvider(t *testing.T) {
 	basicProviderTest := features.New("provider test").
+		Setup(providers.CreateWorkloadCluster()).
+		Setup(providers.CreateMCP()).
 		Setup(providers.InstallServiceProvider()).
 		Setup(resources.ImportResources([]string{})).
 		Assess("verify resources", providers.VerifyServiceProvider([]string{}, time.Minute)).

@@ -16,8 +16,7 @@ type OpenMCPSetup struct {
 func (s *OpenMCPSetup) Bootstrap(testenv env.Environment, cluster *kind.Cluster) {
 	testenv.Setup(envfuncs.CreateCluster(cluster, "platform-cluster")).
 		Setup(InstallClusterProviderKind()).
-		Setup(InstallOpenMCPOperator()).
-		Setup(CreateMCP())
+		Setup(InstallOpenMCPOperator())
 }
 
 func InstallClusterProviderKind() types.EnvFunc {
@@ -32,14 +31,6 @@ func InstallOpenMCPOperator() types.EnvFunc {
 	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
 		// install openmcp operator
 		// wait for onboarding cluster to be ready
-		return ctx, nil
-	}
-}
-
-func CreateMCP() types.EnvFunc {
-	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
-		// create mcp
-		// wait for mcp to be ready
 		return ctx, nil
 	}
 }
