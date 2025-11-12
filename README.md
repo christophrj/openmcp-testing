@@ -7,6 +7,14 @@ OpenMCP-testing helps to set up e2e test suites for openmcp applications. Like [
 * [`pkg/resources`](./pkg/resources/) provides functionality to (batch) import and delete resources
 * [`pkg/setup`](./pkg/setup/) provides functionality to bootstrap an openmcp environment
 
+## Requirements and Setup
+
+You need a working [go](https://go.dev/) environment to execute the sample test suite.
+
+```shell
+go test -v ./e2e/...
+```
+
 ## References
 
 * [e2e-framework](https://github.com/kubernetes-sigs/e2e-framework)

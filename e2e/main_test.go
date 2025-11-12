@@ -12,7 +12,7 @@ import (
 var testenv env.Environment
 
 func TestMain(m *testing.M) {
-	testenv := env.New()
+	testenv = env.New()
 	openmcp := setup.OpenMCPSetup{}
 	openmcp.Bootstrap(testenv, &kind.Cluster{})
 	os.Exit(testenv.Run(m))
