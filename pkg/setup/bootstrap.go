@@ -14,9 +14,11 @@ type OpenMCPSetup struct {
 }
 
 func (s *OpenMCPSetup) Bootstrap(testenv env.Environment, cluster *kind.Cluster) {
-	testenv.Setup(envfuncs.CreateCluster(cluster, "platform-cluster")).
+	clusterName := "platform-cluster"
+	testenv.Setup(envfuncs.CreateCluster(cluster, clusterName)).
 		Setup(InstallClusterProviderKind()).
-		Setup(InstallOpenMCPOperator())
+		Setup(InstallOpenMCPOperator()).
+		Finish(envfuncs.DestroyCluster(clusterName))
 }
 
 func InstallClusterProviderKind() types.EnvFunc {
