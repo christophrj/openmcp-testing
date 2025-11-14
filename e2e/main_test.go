@@ -1,19 +1,27 @@
 package e2e
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
 	"github.com/christophrj/openmcp-testing/pkg/setup"
 	"sigs.k8s.io/e2e-framework/pkg/env"
-	"sigs.k8s.io/e2e-framework/third_party/kind"
+	"sigs.k8s.io/e2e-framework/pkg/envconf"
 )
 
 var testenv env.Environment
 
 func TestMain(m *testing.M) {
-	testenv = env.New()
-	openmcp := setup.OpenMCPSetup{}
-	openmcp.Bootstrap(testenv, &kind.Cluster{})
+	openmcp := setup.OpenMCPSetup{
+		Namespace:                "openmcp-system",
+		ClusterProviderManifests: "crs/setup/cluster-provider-kind.yaml",
+		OperatorManifests:        "crs/setup/openmcp-operator.yaml",
+		OperatorName:             "openmcp-operator",
+	}
+	testenv = env.NewWithConfig(envconf.New().WithNamespace(openmcp.Namespace))
+	if err := openmcp.Bootstrap(testenv); err != nil {
+		panic(fmt.Errorf("openmcp bootstrap failed: %v", err))
+	}
 	os.Exit(testenv.Run(m))
 }

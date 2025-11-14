@@ -12,7 +12,11 @@ OpenMCP-testing helps to set up e2e test suites for openmcp applications. Like [
 You need [go](https://go.dev/), an environment to run container images like [docker](https://www.docker.com/) or [podman](https://podman.io/), and [kind](https://kind.sigs.k8s.io/) to execute the sample test suite.
 
 ```shell
-go test -v ./e2e/...
+OPENMCP_OPERATOR_IMAGE=ghcr.io/openmcp-project/images/openmcp-operator:v0.13.0 \
+    OPENMCP_ENVIRONMENT=debug \
+    OPENMCP_CP_KIND_IMAGE=ghcr.io/openmcp-project/images/cluster-provider-kind:v0.0.15 \
+    OPENMCP_PLATFORM_NAME=platform \
+    go test -v ./e2e/...
 ```
 
 ## References

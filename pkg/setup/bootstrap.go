@@ -2,7 +2,17 @@ package setup
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"time"
 
+	openmcpcond "github.com/christophrj/openmcp-testing/pkg/conditions"
+	"github.com/christophrj/openmcp-testing/pkg/resources"
+	"github.com/vladimirvivien/gexe"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/klog/v2"
+	"sigs.k8s.io/e2e-framework/klient/wait"
+	"sigs.k8s.io/e2e-framework/klient/wait/conditions"
 	"sigs.k8s.io/e2e-framework/pkg/env"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 	"sigs.k8s.io/e2e-framework/pkg/envfuncs"
@@ -11,28 +21,73 @@ import (
 )
 
 type OpenMCPSetup struct {
+	Namespace                string
+	ClusterProviderManifests string
+	OperatorManifests        string
+	OperatorName             string
 }
 
-func (s *OpenMCPSetup) Bootstrap(testenv env.Environment, cluster *kind.Cluster) {
-	clusterName := "platform-cluster"
-	testenv.Setup(envfuncs.CreateCluster(cluster, clusterName)).
-		Setup(InstallClusterProviderKind()).
-		Setup(InstallOpenMCPOperator()).
-		Finish(envfuncs.DestroyCluster(clusterName))
+func (s *OpenMCPSetup) Bootstrap(testenv env.Environment) error {
+	if err := PullImage(os.Getenv("OPENMCP_OPERATOR_IMAGE")); err != nil {
+		return err
+	}
+	if err := PullImage(os.Getenv("OPENMCP_CP_KIND_IMAGE")); err != nil {
+		return err
+	}
+	platformClusterName := envconf.RandomName("platform-cluster", 16)
+	testenv.Setup(envfuncs.CreateClusterWithConfig(kind.NewProvider(), platformClusterName, "kind-config.yaml")).
+		Setup(envfuncs.CreateNamespace(s.Namespace)).
+		Setup(InstallOpenMCPOperator(s.OperatorName, s.Namespace, s.OperatorManifests)).
+		Setup(InstallClusterProvider("kind", s.ClusterProviderManifests)).
+		Finish(envfuncs.DestroyCluster(platformClusterName))
+	return nil
 }
 
-func InstallClusterProviderKind() types.EnvFunc {
+func InstallClusterProvider(name string, clusterProviderManifestPath string) types.EnvFunc {
 	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
 		// install cluster provider kind
-		// wait for cluster profiles to be ready
+		err := resources.CreateObjectsFromFile(ctx, c, clusterProviderManifestPath)
+		if err != nil {
+			return ctx, err
+		}
+		// wait for cluster provider to be ready
+		r, err := resources.ResClient(c)
+		if err != nil {
+			return ctx, err
+		}
+		if err := wait.For(openmcpcond.New(r).ClusterProviderConditionMatch(name, "Ready", v1.ConditionTrue)); err != nil {
+			return ctx, err
+		}
+		klog.Infof("cluster provider %s ready", name)
 		return ctx, nil
 	}
 }
 
-func InstallOpenMCPOperator() types.EnvFunc {
+func InstallOpenMCPOperator(name string, nameSpace string, manifests string) types.EnvFunc {
 	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
-		// install openmcp operator
-		// wait for onboarding cluster to be ready
+		// apply openmcp operator manifests
+		if err := resources.CreateObjectsFromFile(ctx, c, manifests); err != nil {
+			return ctx, err
+		}
+		cl, err := resources.ResClient(c)
+		if err != nil {
+			return ctx, err
+		}
+		// wait for deployment to be ready
+		if err := wait.For(conditions.New(cl).DeploymentAvailable(name, nameSpace), wait.WithTimeout(time.Minute)); err != nil {
+			return ctx, err
+		}
+		klog.Info("openmcp operator ready")
 		return ctx, nil
 	}
+}
+
+func PullImage(image string) error {
+	klog.Info("Pulling ", image)
+	runner := gexe.New()
+	p := runner.RunProc(fmt.Sprintf("docker pull %s", image))
+	if p.Err() != nil {
+		return fmt.Errorf("docker pull %v failed: %w: %s", image, p.Err(), p.Result())
+	}
+	return nil
 }
