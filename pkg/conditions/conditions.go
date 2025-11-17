@@ -3,45 +3,76 @@ package conditions
 import (
 	"context"
 
+	"github.com/christophrj/openmcp-testing/pkg/resources"
 	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
-	"sigs.k8s.io/e2e-framework/klient/k8s/resources"
-	apimachineryconditions "sigs.k8s.io/e2e-framework/klient/wait/conditions"
+	fwresources "sigs.k8s.io/e2e-framework/klient/k8s/resources"
+	fwconditions "sigs.k8s.io/e2e-framework/klient/wait/conditions"
 )
 
 type Conditions struct {
-	apimachineryconditions.Condition
-	resources *resources.Resources
+	fwconditions.Condition
+	cfg *rest.Config
 }
 
-func New(r *resources.Resources) *Conditions {
-	return &Conditions{Condition: *apimachineryconditions.New(r), resources: r}
+func New(r *fwresources.Resources) *Conditions {
+	return &Conditions{Condition: *fwconditions.New(r), cfg: r.GetConfig()}
 }
 
 func (c *Conditions) ClusterProviderConditionMatch(name string, conditionType string, conditionStatus v1.ConditionStatus) wait.ConditionWithContextFunc {
 	return func(ctx context.Context) (done bool, err error) {
 		klog.Infof("Waiting for cluster provider %s", name)
-		cl, err := dynamic.NewForConfig(c.resources.GetConfig())
+		obj, err := c.retrieveObject(ctx, types.NamespacedName{
+			Name: name,
+		}, resources.ClusterproviderGVR)
 		if err != nil {
 			return false, err
 		}
-		res := cl.Resource(schema.GroupVersionResource{
-			Group:    "openmcp.cloud",
-			Version:  "v1alpha1",
-			Resource: "clusterproviders",
-		})
-		providerObject, err := res.Get(ctx, name, metav1.GetOptions{})
-		if err != nil {
-			return false, err
-		}
-		result := checkCondition(providerObject, conditionType, conditionStatus)
-		return result, nil
+		return checkCondition(obj, conditionType, conditionStatus), nil
 	}
+}
+
+func (c *Conditions) ClusterConditionMatch(ref types.NamespacedName, conditionType string, conditionStatus v1.ConditionStatus) wait.ConditionWithContextFunc {
+	return func(ctx context.Context) (done bool, err error) {
+		klog.Infof("Waiting for cluster: %s", ref)
+		obj, err := c.retrieveObject(ctx, ref, resources.ClusterGVR)
+		if err != nil {
+			return false, ignoreNotFound(err)
+		}
+		return checkCondition(obj, conditionType, conditionStatus), nil
+	}
+}
+
+func (c *Conditions) ClusterDelete(ref types.NamespacedName) wait.ConditionWithContextFunc {
+	return func(ctx context.Context) (done bool, err error) {
+		klog.Infof("Waiting for cluster deletion: %s", ref)
+		_, err = c.retrieveObject(ctx, ref, resources.ClusterGVR)
+		if err != nil && !errors.IsNotFound(err) {
+			return false, err
+		}
+		return err != nil && errors.IsNotFound(err), nil
+	}
+}
+
+func ignoreNotFound(err error) error {
+	if errors.IsNotFound(err) {
+		return nil
+	}
+	return err
+}
+
+func (c *Conditions) retrieveObject(ctx context.Context, ref types.NamespacedName, gvr schema.GroupVersionResource) (*unstructured.Unstructured, error) {
+	cl, err := resources.New(c.cfg)
+	if err != nil {
+		return nil, err
+	}
+	return cl.GetObject(ctx, ref, gvr)
 }
 
 func checkCondition(unstruc *unstructured.Unstructured, desiredType string, desiredStatus v1.ConditionStatus) bool {
