@@ -5,13 +5,49 @@ import (
 	"testing"
 	"time"
 
+	"github.com/christophrj/openmcp-testing/internal"
+	"github.com/christophrj/openmcp-testing/pkg/conditions"
+	"github.com/christophrj/openmcp-testing/pkg/resources"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/klog/v2"
+	"sigs.k8s.io/e2e-framework/klient/wait"
+	"sigs.k8s.io/e2e-framework/pkg/env"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 	"sigs.k8s.io/e2e-framework/pkg/features"
 )
 
-func InstallServiceProvider() features.Func {
-	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-		return ctx
+const spTemplate = `
+apiVersion: openmcp.cloud/v1alpha1
+kind: ServiceProvider
+metadata:
+  name: {{.Name}}
+spec:
+  image: {{.Image}}
+`
+
+type ServiceProviderSetup struct {
+	Name  string
+	Image string
+}
+
+func InstallServiceProvider(opts ServiceProviderSetup) env.Func {
+	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
+		sp, err := internal.ExecTemplate(spTemplate, opts)
+		if err != nil {
+			return ctx, err
+		}
+		err = resources.CreateObjectsFromManifest(ctx, c, sp)
+		if err != nil {
+			return ctx, err
+		}
+		err = wait.For(conditions.New(c, resources.ServiceProviderGVR).
+			Match(types.NamespacedName{Name: opts.Name}, "Ready", v1.ConditionTrue))
+		if err != nil {
+			return ctx, err
+		}
+		klog.Infof("service provider %s ready", opts.Name)
+		return ctx, nil
 	}
 }
 

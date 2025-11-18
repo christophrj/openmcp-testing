@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"strings"
+	"text/template"
 )
 
 func SubstitutePlaceholders(reader io.Reader) (io.Reader, error) {
@@ -25,4 +27,16 @@ func SubstitutePlaceholders(reader io.Reader) (io.Reader, error) {
 		return value
 	})
 	return bytes.NewReader([]byte(result)), nil
+}
+
+func ExecTemplate(textTemplate string, data interface{}) (string, error) {
+	tmpl, err := template.New("t").Parse(textTemplate)
+	if err != nil {
+		return "", err
+	}
+	result := strings.Builder{}
+	if err := tmpl.Execute(&result, data); err != nil {
+		return "", err
+	}
+	return result.String(), nil
 }

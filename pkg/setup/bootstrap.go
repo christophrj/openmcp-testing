@@ -7,6 +7,7 @@ import (
 	"time"
 
 	openmcpcond "github.com/christophrj/openmcp-testing/pkg/conditions"
+	"github.com/christophrj/openmcp-testing/pkg/providers"
 	"github.com/christophrj/openmcp-testing/pkg/resources"
 	"github.com/vladimirvivien/gexe"
 	v1 "k8s.io/api/core/v1"
@@ -26,6 +27,7 @@ type OpenMCPSetup struct {
 	ClusterProviderManifests string
 	OperatorManifests        string
 	OperatorName             string
+	ServiceProvider          providers.ServiceProviderSetup
 }
 
 func (s *OpenMCPSetup) Bootstrap(testenv env.Environment) error {
@@ -41,6 +43,7 @@ func (s *OpenMCPSetup) Bootstrap(testenv env.Environment) error {
 		Setup(InstallOpenMCPOperator(s.OperatorName, s.Namespace, s.OperatorManifests)).
 		Setup(InstallClusterProvider("kind", s.ClusterProviderManifests)).
 		Setup(s.verifySetup()).
+		Setup(providers.InstallServiceProvider(s.ServiceProvider)).
 		Finish(s.cleanup()).
 		Finish(envfuncs.DestroyCluster(platformClusterName))
 	return nil
@@ -49,33 +52,25 @@ func (s *OpenMCPSetup) Bootstrap(testenv env.Environment) error {
 func (s *OpenMCPSetup) cleanup() types.EnvFunc {
 	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
 		klog.Info("cleaning up...")
-		cl, err := resources.NewFromEnvConfig(c)
-		if err != nil {
-			return ctx, err
-		}
 		onboardingCluster := apiTypes.NamespacedName{
 			Namespace: s.Namespace,
 			Name:      "onboarding",
 		}
-		err = cl.DeleteObject(ctx, onboardingCluster, resources.ClusterGVR)
+		err := resources.DeleteObject(ctx, c, onboardingCluster, resources.ClusterGVR)
 		if err != nil {
 			return ctx, err
 		}
-		return ctx, wait.For(openmcpcond.New(cl.Resources).ClusterDelete(onboardingCluster), wait.WithTimeout(time.Minute))
+		return ctx, wait.For(openmcpcond.New(c, resources.ClusterGVR).Deleted(onboardingCluster),
+			wait.WithTimeout(time.Minute))
 	}
 }
 
 func (s *OpenMCPSetup) verifySetup() types.EnvFunc {
 	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
-		cl, err := resources.NewFromEnvConfig(c)
-		if err != nil {
-			return ctx, err
-		}
 		onboardingCluster := "onboarding"
-		if err := wait.For(openmcpcond.New(cl.Resources).ClusterConditionMatch(apiTypes.NamespacedName{
-			Namespace: s.Namespace,
-			Name:      onboardingCluster,
-		}, "Ready", v1.ConditionTrue), wait.WithTimeout(time.Minute)); err != nil {
+		if err := wait.For(openmcpcond.New(c, resources.ClusterGVR).
+			Match(apiTypes.NamespacedName{Namespace: s.Namespace, Name: onboardingCluster}, "Ready", v1.ConditionTrue),
+			wait.WithTimeout(time.Minute)); err != nil {
 			return ctx, err
 		}
 		klog.Infof("%s cluster ready", onboardingCluster)
@@ -91,11 +86,8 @@ func InstallClusterProvider(name string, clusterProviderManifestPath string) typ
 			return ctx, err
 		}
 		// wait for cluster provider to be ready
-		cl, err := resources.NewFromEnvConfig(c)
-		if err != nil {
-			return ctx, err
-		}
-		if err := wait.For(openmcpcond.New(cl.Resources).ClusterProviderConditionMatch(name, "Ready", v1.ConditionTrue), wait.WithTimeout(time.Minute)); err != nil {
+		if err := wait.For(openmcpcond.New(c, resources.ClusterproviderGVR).Match(apiTypes.NamespacedName{Name: name}, "Ready", v1.ConditionTrue),
+			wait.WithTimeout(time.Minute)); err != nil {
 			return ctx, err
 		}
 		klog.Infof("cluster provider %s ready", name)
@@ -109,12 +101,8 @@ func InstallOpenMCPOperator(name string, nameSpace string, manifests string) typ
 		if err := resources.CreateObjectsFromFile(ctx, c, manifests); err != nil {
 			return ctx, err
 		}
-		cl, err := resources.NewFromEnvConfig(c)
-		if err != nil {
-			return ctx, err
-		}
 		// wait for deployment to be ready
-		if err := wait.For(conditions.New(cl.Resources).DeploymentAvailable(name, nameSpace), wait.WithTimeout(time.Minute)); err != nil {
+		if err := wait.For(conditions.New(c.Client().Resources()).DeploymentAvailable(name, nameSpace), wait.WithTimeout(time.Minute)); err != nil {
 			return ctx, err
 		}
 		klog.Info("openmcp operator ready")

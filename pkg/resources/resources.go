@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/christophrj/openmcp-testing/internal"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -11,47 +12,19 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/rest"
 	"sigs.k8s.io/e2e-framework/klient/decoder"
 	"sigs.k8s.io/e2e-framework/klient/k8s"
-	"sigs.k8s.io/e2e-framework/klient/k8s/resources"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 )
 
 var (
 	ClusterproviderGVR = schema.GroupVersionResource{Group: "openmcp.cloud", Version: "v1alpha1", Resource: "clusterproviders"}
+	ServiceProviderGVR = schema.GroupVersionResource{Group: "openmcp.cloud", Version: "v1alpha1", Resource: "serviceproviders"}
 	ClusterGVR         = schema.GroupVersionResource{Group: "clusters.openmcp.cloud", Version: "v1alpha1", Resource: "clusters"}
 )
 
-type Client struct {
-	Resources *resources.Resources
-}
-
-func New(cfg *rest.Config) (*Client, error) {
-	r, err := resources.New(cfg)
-	if err != nil {
-		return nil, err
-	}
-	return &Client{
-		Resources: r,
-	}, nil
-}
-
-func (c *Client) WithNamespace(namespace string) *Client {
-	c.Resources = c.Resources.WithNamespace(namespace)
-	return c
-}
-
-func NewFromEnvConfig(cfg *envconf.Config) (*Client, error) {
-	c, err := New(cfg.Client().RESTConfig())
-	if err != nil {
-		return nil, err
-	}
-	return c.WithNamespace(cfg.Namespace()), nil
-}
-
-func (c *Client) GetObject(ctx context.Context, ref types.NamespacedName, gvr schema.GroupVersionResource) (*unstructured.Unstructured, error) {
-	cl, err := dynamic.NewForConfig(c.Resources.GetConfig())
+func GetObject(ctx context.Context, c *envconf.Config, ref types.NamespacedName, gvr schema.GroupVersionResource) (*unstructured.Unstructured, error) {
+	cl, err := dynamic.NewForConfig(c.Client().RESTConfig())
 	if err != nil {
 		return nil, err
 	}
@@ -59,8 +32,8 @@ func (c *Client) GetObject(ctx context.Context, ref types.NamespacedName, gvr sc
 	return res.Namespace(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
 }
 
-func (c *Client) DeleteObject(ctx context.Context, ref types.NamespacedName, gvr schema.GroupVersionResource) error {
-	cl, err := dynamic.NewForConfig(c.Resources.GetConfig())
+func DeleteObject(ctx context.Context, c *envconf.Config, ref types.NamespacedName, gvr schema.GroupVersionResource) error {
+	cl, err := dynamic.NewForConfig(c.Client().RESTConfig())
 	if err != nil {
 		return err
 	}
@@ -73,11 +46,12 @@ func CreateObjectsFromFile(ctx context.Context, cfg *envconf.Config, filePath st
 	if err != nil {
 		return err
 	}
-	cl, err := NewFromEnvConfig(cfg)
-	if err != nil {
-		return err
-	}
-	return decoder.DecodeEach(ctx, substFile, decoder.CreateIgnoreAlreadyExists(cl.Resources), decoder.MutateNamespace(cfg.Namespace()))
+	return decoder.DecodeEach(ctx, substFile, decoder.CreateIgnoreAlreadyExists(cfg.Client().Resources()), decoder.MutateNamespace(cfg.Namespace()))
+}
+
+func CreateObjectsFromManifest(ctx context.Context, cfg *envconf.Config, manifest string) error {
+	r := strings.NewReader(manifest)
+	return decoder.DecodeEach(ctx, r, decoder.CreateIgnoreAlreadyExists(cfg.Client().Resources()), decoder.MutateNamespace(cfg.Namespace()))
 }
 
 func GetObjectsFromFile(ctx context.Context, cfg *envconf.Config, filePath string) ([]k8s.Object, error) {
@@ -85,12 +59,8 @@ func GetObjectsFromFile(ctx context.Context, cfg *envconf.Config, filePath strin
 	if err != nil {
 		return nil, err
 	}
-	cl, err := NewFromEnvConfig(cfg)
-	if err != nil {
-		return nil, err
-	}
 	objects := make([]k8s.Object, 0)
-	err = decoder.DecodeEach(ctx, substFile, decoder.ReadHandler(cl.Resources, func(ctx context.Context, obj k8s.Object) error {
+	err = decoder.DecodeEach(ctx, substFile, decoder.ReadHandler(cfg.Client().Resources(), func(ctx context.Context, obj k8s.Object) error {
 		objects = append(objects, obj)
 		return nil
 	}), decoder.MutateNamespace(cfg.Namespace()))

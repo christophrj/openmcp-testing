@@ -10,38 +10,29 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
-	fwresources "sigs.k8s.io/e2e-framework/klient/k8s/resources"
 	fwconditions "sigs.k8s.io/e2e-framework/klient/wait/conditions"
+	"sigs.k8s.io/e2e-framework/pkg/envconf"
 )
 
 type Conditions struct {
 	fwconditions.Condition
-	cfg *rest.Config
+	cfg *envconf.Config
+	gvr schema.GroupVersionResource
 }
 
-func New(r *fwresources.Resources) *Conditions {
-	return &Conditions{Condition: *fwconditions.New(r), cfg: r.GetConfig()}
-}
-
-func (c *Conditions) ClusterProviderConditionMatch(name string, conditionType string, conditionStatus v1.ConditionStatus) wait.ConditionWithContextFunc {
-	return func(ctx context.Context) (done bool, err error) {
-		klog.Infof("Waiting for cluster provider %s", name)
-		obj, err := c.retrieveObject(ctx, types.NamespacedName{
-			Name: name,
-		}, resources.ClusterproviderGVR)
-		if err != nil {
-			return false, err
-		}
-		return checkCondition(obj, conditionType, conditionStatus), nil
+func New(cfg *envconf.Config, gvr schema.GroupVersionResource) *Conditions {
+	return &Conditions{
+		Condition: *fwconditions.New(cfg.Client().Resources()),
+		cfg:       cfg,
+		gvr:       gvr,
 	}
 }
 
-func (c *Conditions) ClusterConditionMatch(ref types.NamespacedName, conditionType string, conditionStatus v1.ConditionStatus) wait.ConditionWithContextFunc {
+func (c *Conditions) Match(ref types.NamespacedName, conditionType string, conditionStatus v1.ConditionStatus) wait.ConditionWithContextFunc {
 	return func(ctx context.Context) (done bool, err error) {
-		klog.Infof("Waiting for cluster: %s", ref)
-		obj, err := c.retrieveObject(ctx, ref, resources.ClusterGVR)
+		klog.Infof("Waiting for condition: %s %s", c.gvr, ref)
+		obj, err := resources.GetObject(ctx, c.cfg, ref, c.gvr)
 		if err != nil {
 			return false, ignoreNotFound(err)
 		}
@@ -49,10 +40,10 @@ func (c *Conditions) ClusterConditionMatch(ref types.NamespacedName, conditionTy
 	}
 }
 
-func (c *Conditions) ClusterDelete(ref types.NamespacedName) wait.ConditionWithContextFunc {
+func (c *Conditions) Deleted(ref types.NamespacedName) wait.ConditionWithContextFunc {
 	return func(ctx context.Context) (done bool, err error) {
-		klog.Infof("Waiting for cluster deletion: %s", ref)
-		_, err = c.retrieveObject(ctx, ref, resources.ClusterGVR)
+		klog.Infof("Waiting for deletion: %s %s", c.gvr, ref)
+		_, err = resources.GetObject(ctx, c.cfg, ref, c.gvr)
 		if err != nil && !errors.IsNotFound(err) {
 			return false, err
 		}
@@ -65,14 +56,6 @@ func ignoreNotFound(err error) error {
 		return nil
 	}
 	return err
-}
-
-func (c *Conditions) retrieveObject(ctx context.Context, ref types.NamespacedName, gvr schema.GroupVersionResource) (*unstructured.Unstructured, error) {
-	cl, err := resources.New(c.cfg)
-	if err != nil {
-		return nil, err
-	}
-	return cl.GetObject(ctx, ref, gvr)
 }
 
 func checkCondition(unstruc *unstructured.Unstructured, desiredType string, desiredStatus v1.ConditionStatus) bool {
