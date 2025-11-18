@@ -15,9 +15,10 @@ import (
 )
 
 var (
-	ClusterproviderGVR = schema.GroupVersionResource{Group: "openmcp.cloud", Version: "v1alpha1", Resource: "clusterproviders"}
-	ServiceProviderGVR = schema.GroupVersionResource{Group: "openmcp.cloud", Version: "v1alpha1", Resource: "serviceproviders"}
-	ClusterGVR         = schema.GroupVersionResource{Group: "clusters.openmcp.cloud", Version: "v1alpha1", Resource: "clusters"}
+	ClusterproviderGVR     = schema.GroupVersionResource{Group: "openmcp.cloud", Version: "v1alpha1", Resource: "clusterproviders"}
+	ServiceProviderGVR     = schema.GroupVersionResource{Group: "openmcp.cloud", Version: "v1alpha1", Resource: "serviceproviders"}
+	ClusterGVR             = schema.GroupVersionResource{Group: "clusters.openmcp.cloud", Version: "v1alpha1", Resource: "clusters"}
+	ManagedControlPlaneGVR = schema.GroupVersionResource{Group: "core.openmcp.cloud", Version: "v2alpha1", Resource: "managedcontrolplanev2s"}
 )
 
 func GetObject(ctx context.Context, c *envconf.Config, ref types.NamespacedName, gvr schema.GroupVersionResource) (*unstructured.Unstructured, error) {

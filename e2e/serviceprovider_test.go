@@ -11,7 +11,7 @@ import (
 func TestServiceProvider(t *testing.T) {
 	basicProviderTest := features.New("provider test").
 		Setup(providers.CreateWorkloadCluster()).
-		Setup(providers.CreateMCP()).
+		Setup(providers.CreateMCP("test-mcp")).
 		Assess("verify resources", providers.VerifyServiceProvider([]string{}, time.Minute)).
 		Teardown(providers.DelelteServiceProvider())
 	testenv.Test(t, basicProviderTest.Feature())
