@@ -2,6 +2,7 @@
 
 OpenMCP-testing helps to set up e2e test suites for openmcp applications. Like [xp-testing](https://github.com/crossplane-contrib/xp-testing) but for [openmcp](https://github.com/openmcp-project).
 
+* [`pkg/clusterutils`](./pkg/clusterutils/) provides functionality to interact with the different clusters of an openMCP installation
 * [`pkg/conditions`](./pkg/conditions/) provides common pre/post condition checks
 * [`pkg/providers`](./pkg/providers/) provides functionality to test cluster-providers, platform-services and service-providers
 * [`pkg/resources`](./pkg/resources/) provides functionality to (batch) import and delete resources
