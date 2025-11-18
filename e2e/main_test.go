@@ -15,10 +15,17 @@ var testenv env.Environment
 
 func TestMain(m *testing.M) {
 	openmcp := setup.OpenMCPSetup{
-		Namespace:                "openmcp-system",
-		ClusterProviderManifests: "crs/setup/cluster-provider-kind.yaml",
-		OperatorManifests:        "crs/setup/openmcp-operator.yaml",
-		OperatorName:             "openmcp-operator",
+		Namespace: "openmcp-system",
+		Operator: setup.OpenMCPOperatorSetup{
+			Name:         "openmcp-operator",
+			Image:        "ghcr.io/openmcp-project/images/openmcp-operator:v0.13.0",
+			Environment:  "debug",
+			PlatformName: "platform",
+		},
+		ClusterProvider: providers.CluterProviderSetup{
+			Name:  "kind",
+			Image: "ghcr.io/openmcp-project/images/cluster-provider-kind:v0.0.15",
+		},
 		ServiceProvider: providers.ServiceProviderSetup{
 			Name:  "crossplane",
 			Image: "ghcr.io/openmcp-project/images/service-provider-crossplane:v0.0.4",

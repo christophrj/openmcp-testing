@@ -2,8 +2,6 @@ package resources
 
 import (
 	"context"
-	"io"
-	"os"
 	"strings"
 
 	"github.com/christophrj/openmcp-testing/internal"
@@ -13,7 +11,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"sigs.k8s.io/e2e-framework/klient/decoder"
-	"sigs.k8s.io/e2e-framework/klient/k8s"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 )
 
@@ -41,36 +38,23 @@ func DeleteObject(ctx context.Context, c *envconf.Config, ref types.NamespacedNa
 	return res.Namespace(ref.Namespace).Delete(ctx, ref.Name, metav1.DeleteOptions{})
 }
 
-func CreateObjectsFromFile(ctx context.Context, cfg *envconf.Config, filePath string) error {
-	substFile, err := substitute(filePath)
+func CreateObjectsFromTemplateFile(ctx context.Context, cfg *envconf.Config, filePath string, data interface{}) error {
+	manifest, err := internal.ExecTemplateFile(filePath, data)
 	if err != nil {
 		return err
 	}
-	return decoder.DecodeEach(ctx, substFile, decoder.CreateIgnoreAlreadyExists(cfg.Client().Resources()), decoder.MutateNamespace(cfg.Namespace()))
+	return CreateObjectsFromManifest(ctx, cfg, manifest)
+}
+
+func CreateObjectsFromTemplate(ctx context.Context, cfg *envconf.Config, template string, data interface{}) error {
+	manifest, err := internal.ExecTemplate(template, data)
+	if err != nil {
+		return err
+	}
+	return CreateObjectsFromManifest(ctx, cfg, manifest)
 }
 
 func CreateObjectsFromManifest(ctx context.Context, cfg *envconf.Config, manifest string) error {
 	r := strings.NewReader(manifest)
 	return decoder.DecodeEach(ctx, r, decoder.CreateIgnoreAlreadyExists(cfg.Client().Resources()), decoder.MutateNamespace(cfg.Namespace()))
-}
-
-func GetObjectsFromFile(ctx context.Context, cfg *envconf.Config, filePath string) ([]k8s.Object, error) {
-	substFile, err := substitute(filePath)
-	if err != nil {
-		return nil, err
-	}
-	objects := make([]k8s.Object, 0)
-	err = decoder.DecodeEach(ctx, substFile, decoder.ReadHandler(cfg.Client().Resources(), func(ctx context.Context, obj k8s.Object) error {
-		objects = append(objects, obj)
-		return nil
-	}), decoder.MutateNamespace(cfg.Namespace()))
-	return objects, err
-}
-
-func substitute(filePath string) (io.Reader, error) {
-	f, err := os.Open(filePath)
-	if err != nil {
-		return nil, err
-	}
-	return internal.SubstitutePlaceholders(f)
 }

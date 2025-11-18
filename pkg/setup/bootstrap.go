@@ -3,7 +3,6 @@ package setup
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	openmcpcond "github.com/christophrj/openmcp-testing/pkg/conditions"
@@ -23,25 +22,36 @@ import (
 )
 
 type OpenMCPSetup struct {
-	Namespace                string
-	ClusterProviderManifests string
-	OperatorManifests        string
-	OperatorName             string
-	ServiceProvider          providers.ServiceProviderSetup
+	Namespace       string
+	Operator        OpenMCPOperatorSetup
+	ClusterProvider providers.CluterProviderSetup
+	ServiceProvider providers.ServiceProviderSetup
+}
+
+type OpenMCPOperatorSetup struct {
+	Name         string
+	Namespace    string
+	Image        string
+	Environment  string
+	PlatformName string
 }
 
 func (s *OpenMCPSetup) Bootstrap(testenv env.Environment) error {
-	if err := PullImage(os.Getenv("OPENMCP_OPERATOR_IMAGE")); err != nil {
+	if err := PullImage(s.Operator.Image); err != nil {
 		return err
 	}
-	if err := PullImage(os.Getenv("OPENMCP_CP_KIND_IMAGE")); err != nil {
+	if err := PullImage(s.ClusterProvider.Image); err != nil {
+		return err
+	}
+	if err := PullImage(s.ServiceProvider.Image); err != nil {
 		return err
 	}
 	platformClusterName := envconf.RandomName("platform-cluster", 16)
-	testenv.Setup(envfuncs.CreateClusterWithConfig(kind.NewProvider(), platformClusterName, "kind-config.yaml")).
+	s.Operator.Namespace = s.Namespace
+	testenv.Setup(envfuncs.CreateClusterWithConfig(kind.NewProvider(), platformClusterName, "../pkg/setup/kind-config.yaml")).
 		Setup(envfuncs.CreateNamespace(s.Namespace)).
-		Setup(InstallOpenMCPOperator(s.OperatorName, s.Namespace, s.OperatorManifests)).
-		Setup(InstallClusterProvider("kind", s.ClusterProviderManifests)).
+		Setup(InstallOpenMCPOperator(s.Operator)).
+		Setup(providers.InstallClusterProvider(s.ClusterProvider)).
 		Setup(s.verifySetup()).
 		Setup(providers.InstallServiceProvider(s.ServiceProvider)).
 		Finish(s.cleanup()).
@@ -78,31 +88,14 @@ func (s *OpenMCPSetup) verifySetup() types.EnvFunc {
 	}
 }
 
-func InstallClusterProvider(name string, clusterProviderManifestPath string) types.EnvFunc {
-	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
-		// install cluster provider kind
-		err := resources.CreateObjectsFromFile(ctx, c, clusterProviderManifestPath)
-		if err != nil {
-			return ctx, err
-		}
-		// wait for cluster provider to be ready
-		if err := wait.For(openmcpcond.New(c, resources.ClusterproviderGVR).Match(apiTypes.NamespacedName{Name: name}, "Ready", v1.ConditionTrue),
-			wait.WithTimeout(time.Minute)); err != nil {
-			return ctx, err
-		}
-		klog.Infof("cluster provider %s ready", name)
-		return ctx, nil
-	}
-}
-
-func InstallOpenMCPOperator(name string, nameSpace string, manifests string) types.EnvFunc {
+func InstallOpenMCPOperator(opts OpenMCPOperatorSetup) types.EnvFunc {
 	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
 		// apply openmcp operator manifests
-		if err := resources.CreateObjectsFromFile(ctx, c, manifests); err != nil {
+		if err := resources.CreateObjectsFromTemplateFile(ctx, c, "../pkg/setup/templates/openmcp-operator.yaml", opts); err != nil {
 			return ctx, err
 		}
 		// wait for deployment to be ready
-		if err := wait.For(conditions.New(c.Client().Resources()).DeploymentAvailable(name, nameSpace), wait.WithTimeout(time.Minute)); err != nil {
+		if err := wait.For(conditions.New(c.Client().Resources()).DeploymentAvailable(opts.Name, opts.Namespace), wait.WithTimeout(time.Minute)); err != nil {
 			return ctx, err
 		}
 		klog.Info("openmcp operator ready")
