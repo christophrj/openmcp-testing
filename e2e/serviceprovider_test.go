@@ -13,6 +13,7 @@ func TestServiceProvider(t *testing.T) {
 		Setup(providers.CreateWorkloadCluster()).
 		Setup(providers.CreateMCP("test-mcp")).
 		Assess("verify resources", providers.VerifyServiceProvider([]string{}, time.Minute)).
+		Teardown(providers.DeleteMCP("test-mcp")).
 		Teardown(providers.DelelteServiceProvider())
 	testenv.Test(t, basicProviderTest.Feature())
 }

@@ -11,9 +11,14 @@ import (
 	"sigs.k8s.io/kind/pkg/cluster"
 )
 
-// set up onboarding cluster client
-func OnboardingConfig() (*envconf.Config, error) {
-	kubeConfig, err := retrieveKindClusterNameByPrefix("onboarding")
+// prefix = kind cluster name prefix, namespace = config namespace
+func ConfigByPrefix(prefix string, namespace string) (*envconf.Config, error) {
+	kind := cluster.NewProvider()
+	clusterName, err := retrieveKindClusterNameByPrefix(prefix)
+	if err != nil {
+		return nil, err
+	}
+	kubeConfig, err := kind.KubeConfig(clusterName, false)
 	if err != nil {
 		return nil, err
 	}
@@ -26,7 +31,12 @@ func OnboardingConfig() (*envconf.Config, error) {
 		return nil, err
 	}
 	onboardingCfg := envconf.New().WithClient(onboardingClient)
-	return onboardingCfg.WithNamespace(corev1.NamespaceDefault), nil
+	return onboardingCfg.WithNamespace(namespace), nil
+}
+
+// set up onboarding cluster client
+func OnboardingConfig() (*envconf.Config, error) {
+	return ConfigByPrefix("onboarding", corev1.NamespaceDefault)
 }
 
 func retrieveKindClusterNameByPrefix(prefix string) (string, error) {
@@ -37,7 +47,7 @@ func retrieveKindClusterNameByPrefix(prefix string) (string, error) {
 	}
 	for _, clusterName := range clusters {
 		if strings.HasPrefix(clusterName, prefix) {
-			return kind.KubeConfig(clusterName, false)
+			return clusterName, nil
 		}
 	}
 	return "", fmt.Errorf("no cluster found with prefix %s", prefix)

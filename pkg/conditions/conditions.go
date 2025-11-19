@@ -40,6 +40,24 @@ func (c *Conditions) Match(ref types.NamespacedName, conditionType string, condi
 	}
 }
 
+func (c *Conditions) Status(ref types.NamespacedName, key string, value string) wait.ConditionWithContextFunc {
+	return func(ctx context.Context) (done bool, err error) {
+		klog.Infof("Waiting for status: %s %s", c.gvr, ref)
+		obj, err := resources.GetObject(ctx, c.cfg, ref, c.gvr)
+		if err != nil {
+			return false, ignoreNotFound(err)
+		}
+		status, found, err := unstructured.NestedMap(obj.Object, "status")
+		if err != nil {
+			return false, err
+		}
+		if !found {
+			return false, nil
+		}
+		return status[key] == value, nil
+	}
+}
+
 func (c *Conditions) Deleted(ref types.NamespacedName) wait.ConditionWithContextFunc {
 	return func(ctx context.Context) (done bool, err error) {
 		klog.Infof("Waiting for deletion: %s %s", c.gvr, ref)
