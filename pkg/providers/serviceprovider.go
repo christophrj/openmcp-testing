@@ -48,6 +48,7 @@ func InstallServiceProvider(opts ServiceProviderSetup, timeout time.Duration) en
 // and applies it to the onboarding cluster
 func ImportServiceProviderAPIs(directory string, timeout time.Duration) features.Func {
 	return func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+		klog.Infof("apply service provider resources to onboarding cluster from %s ...", directory)
 		// import and wait for resources to be synced and ready
 		return ctx
 	}
@@ -57,6 +58,7 @@ func ImportServiceProviderAPIs(directory string, timeout time.Duration) features
 // and applies it to a MCP cluster
 func ImportDomainAPIs(directory string, timeout time.Duration) features.Func {
 	return func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+		klog.Infof("apply domain service resources to MCP cluster from %s ...", directory)
 		// import and wait for resources to be synced and ready
 		return ctx
 	}

@@ -10,7 +10,7 @@ OpenMCP-testing helps to set up e2e test suites for openmcp applications. Like [
 
 ## Requirements and Setup
 
-You need [go](https://go.dev/) and an environment to run container images like [docker](https://www.docker.com/) or [podman](https://podman.io/) to execute the sample test suite.
+You need [go](https://go.dev/) and [docker](https://www.docker.com/) to execute the sample test suite.
 
 ```shell
     go test -v ./e2e/...
