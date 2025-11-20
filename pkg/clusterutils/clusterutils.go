@@ -11,7 +11,9 @@ import (
 	"sigs.k8s.io/kind/pkg/cluster"
 )
 
-// prefix = kind cluster name prefix, namespace = config namespace
+// ConfigByPrefix returns an environment Config with the passed in namespace and
+// a klient that is set up to interact with the cluster identified by the passed
+// in cluster name prefix
 func ConfigByPrefix(prefix string, namespace string) (*envconf.Config, error) {
 	kind := cluster.NewProvider()
 	clusterName, err := retrieveKindClusterNameByPrefix(prefix)
@@ -24,19 +26,27 @@ func ConfigByPrefix(prefix string, namespace string) (*envconf.Config, error) {
 	}
 	restConfig, err := clientcmd.RESTConfigFromKubeConfig([]byte(kubeConfig))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create rest config based on kubeconfig: %v", err)
+		return nil, err
 	}
 	onboardingClient, err := klient.New(restConfig)
 	if err != nil {
 		return nil, err
 	}
-	onboardingCfg := envconf.New().WithClient(onboardingClient)
-	return onboardingCfg.WithNamespace(namespace), nil
+	return envconf.New().WithClient(onboardingClient).WithNamespace(namespace), nil
 }
 
-// set up onboarding cluster client
+// OnboardingConfig is a utility function to return an environment config to work
+// with the onboarding cluster and default namespace
+// In scenarios where you work with multiple onboarding clusters, use ConfigByPrefix instead
 func OnboardingConfig() (*envconf.Config, error) {
 	return ConfigByPrefix("onboarding", corev1.NamespaceDefault)
+}
+
+// McpConfig is a utility function to return an environment config to work
+// with the mcp cluster and default namespace.
+// In scenarios where you work with multiple MCPs, use ConfigByPrefix instead
+func McpConfig() (*envconf.Config, error) {
+	return ConfigByPrefix("mcp", corev1.NamespaceDefault)
 }
 
 func retrieveKindClusterNameByPrefix(prefix string) (string, error) {

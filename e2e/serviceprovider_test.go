@@ -10,10 +10,8 @@ import (
 
 func TestServiceProvider(t *testing.T) {
 	basicProviderTest := features.New("provider test").
-		Setup(providers.CreateWorkloadCluster()).
-		Setup(providers.CreateMCP("test-mcp")).
-		Assess("verify resources", providers.VerifyServiceProvider([]string{}, time.Minute)).
-		Teardown(providers.DeleteMCP("test-mcp")).
-		Teardown(providers.DelelteServiceProvider())
+		Setup(providers.CreateMCP("test-mcp", time.Minute)).
+		Assess("verify resources", providers.ImportServiceProviderAPIs("", time.Minute)).
+		Teardown(providers.DeleteMCP("test-mcp", time.Minute))
 	testenv.Test(t, basicProviderTest.Feature())
 }

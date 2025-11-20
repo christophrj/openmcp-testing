@@ -29,6 +29,8 @@ func New(cfg *envconf.Config, gvr schema.GroupVersionResource) *Conditions {
 	}
 }
 
+// Match returns true if the conditionType of an object matches the conditionStatus.
+// If an object is not found, the condition is not satisfied and no error is returned.
 func (c *Conditions) Match(ref types.NamespacedName, conditionType string, conditionStatus v1.ConditionStatus) wait.ConditionWithContextFunc {
 	return func(ctx context.Context) (done bool, err error) {
 		klog.Infof("Waiting for condition: %s %s", c.gvr, ref)
@@ -40,6 +42,8 @@ func (c *Conditions) Match(ref types.NamespacedName, conditionType string, condi
 	}
 }
 
+// Status returns true if the status key of an object matches the status value.
+// If an object is not found, the condition is not satisfied and no error is returned.
 func (c *Conditions) Status(ref types.NamespacedName, key string, value string) wait.ConditionWithContextFunc {
 	return func(ctx context.Context) (done bool, err error) {
 		klog.Infof("Waiting for status: %s %s", c.gvr, ref)
@@ -58,6 +62,7 @@ func (c *Conditions) Status(ref types.NamespacedName, key string, value string) 
 	}
 }
 
+// Deleted returns true if an object is not found.
 func (c *Conditions) Deleted(ref types.NamespacedName) wait.ConditionWithContextFunc {
 	return func(ctx context.Context) (done bool, err error) {
 		klog.Infof("Waiting for deletion: %s %s", c.gvr, ref)

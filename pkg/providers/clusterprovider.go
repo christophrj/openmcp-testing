@@ -48,51 +48,44 @@ type CluterProviderSetup struct {
 	Image string
 }
 
-func InstallClusterProvider(opts CluterProviderSetup) env.Func {
+// InstallClusterProvider creates a cluster provider object on the platform cluster and waits until it is ready
+func InstallClusterProvider(opts CluterProviderSetup, timeout time.Duration) env.Func {
 	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
-		// install cluster provider kind
+		klog.Infof("create cluster provider %s", opts.Name)
 		err := resources.CreateObjectsFromTemplate(ctx, c, cpTemplate, opts)
 		if err != nil {
 			return ctx, err
 		}
-		// wait for cluster provider to be ready
 		return ctx, wait.For(conditions.New(c, resources.ClusterproviderGVR).
 			Match(types.NamespacedName{Name: opts.Name}, "Ready", corev1.ConditionTrue),
-			wait.WithTimeout(time.Minute))
+			wait.WithTimeout(timeout))
 	}
 }
 
-func CreateWorkloadCluster() features.Func {
+// CreateMCP creates an MCP object on the onboarding cluster and waits until it is ready
+func CreateMCP(name string, timeout time.Duration) features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-		// create workload cluster
-		// wait for workload cluster to be ready
-		return ctx
-	}
-}
-
-func CreateMCP(name string) features.Func {
-	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+		klog.Infof("create MCP %s", name)
 		onboardingCfg, err := clusterutils.OnboardingConfig()
 		if err != nil {
 			t.Error(err)
 			return ctx
 		}
-		// create MCP
 		if err := resources.CreateObjectsFromTemplate(ctx, onboardingCfg, mcpTemplate, struct{ Name string }{Name: name}); err != nil {
 			t.Errorf("failed to create MCP: %v", err)
 			return ctx
 		}
-		// wait for MCP to get ready
 		if err := wait.For(conditions.New(onboardingCfg, resources.ManagedControlPlaneGVR).
 			Status(types.NamespacedName{Name: name, Namespace: corev1.NamespaceDefault}, "phase", "Ready"),
-			wait.WithTimeout(time.Minute)); err != nil {
+			wait.WithTimeout(timeout)); err != nil {
 			t.Errorf("MCP failed to get ready: %v", err)
 		}
 		return ctx
 	}
 }
 
-func DeleteMCP(name string) features.Func {
+// DeleteMCP deletes the MCP object on the onboarding cluster and waits until the object has been deleted
+func DeleteMCP(name string, timeout time.Duration) features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 		klog.Infof("delete MCP %s", name)
 		onboardingCfg, err := clusterutils.OnboardingConfig()
@@ -110,7 +103,7 @@ func DeleteMCP(name string) features.Func {
 			return ctx
 		}
 		if err := wait.For(conditions.New(onboardingCfg, resources.ManagedControlPlaneGVR).Deleted(mcp),
-			wait.WithTimeout(time.Minute)); err != nil {
+			wait.WithTimeout(timeout)); err != nil {
 			t.Errorf("delete MCP %s timed out: %v", name, err)
 		}
 		return ctx

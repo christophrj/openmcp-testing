@@ -51,9 +51,10 @@ func (s *OpenMCPSetup) Bootstrap(testenv env.Environment) error {
 	testenv.Setup(envfuncs.CreateClusterWithConfig(kind.NewProvider(), platformClusterName, "../pkg/setup/kind-config.yaml")).
 		Setup(envfuncs.CreateNamespace(s.Namespace)).
 		Setup(InstallOpenMCPOperator(s.Operator)).
-		Setup(providers.InstallClusterProvider(s.ClusterProvider)).
+		Setup(providers.InstallClusterProvider(s.ClusterProvider, time.Minute)).
 		Setup(s.verifySetup()).
-		Setup(providers.InstallServiceProvider(s.ServiceProvider)).
+		Setup(providers.InstallServiceProvider(s.ServiceProvider, time.Minute)).
+		Finish(providers.DeleteServiceProvider(s.ServiceProvider, time.Minute)).
 		Finish(s.cleanup()).
 		Finish(envfuncs.DestroyCluster(platformClusterName))
 	return nil
@@ -70,7 +71,8 @@ func (s *OpenMCPSetup) cleanup() types.EnvFunc {
 		if err != nil {
 			return ctx, err
 		}
-		return ctx, wait.For(openmcpcond.New(c, resources.ClusterGVR).Deleted(onboardingCluster),
+		return ctx, wait.For(openmcpcond.New(c, resources.ClusterGVR).
+			Deleted(onboardingCluster),
 			wait.WithTimeout(time.Minute))
 	}
 }
@@ -95,7 +97,9 @@ func InstallOpenMCPOperator(opts OpenMCPOperatorSetup) types.EnvFunc {
 			return ctx, err
 		}
 		// wait for deployment to be ready
-		if err := wait.For(conditions.New(c.Client().Resources()).DeploymentAvailable(opts.Name, opts.Namespace), wait.WithTimeout(time.Minute)); err != nil {
+		if err := wait.For(conditions.New(c.Client().Resources()).
+			DeploymentAvailable(opts.Name, opts.Namespace),
+			wait.WithTimeout(time.Minute)); err != nil {
 			return ctx, err
 		}
 		klog.Info("openmcp operator ready")
