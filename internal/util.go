@@ -5,6 +5,11 @@ import (
 	"os"
 	"strings"
 	"text/template"
+
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/e2e-framework/klient/k8s"
 )
 
 func ExecTemplate(textTemplate string, data interface{}) (string, error) {
@@ -29,4 +34,21 @@ func ExecTemplateFile(filePath string, data interface{}) (string, error) {
 		return "", err
 	}
 	return ExecTemplate(string(bytes), data)
+}
+
+func ToUnstructured(obj k8s.Object) (*unstructured.Unstructured, error) {
+	u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
+	if err != nil {
+		return nil, err
+	}
+	return &unstructured.Unstructured{
+		Object: u,
+	}, nil
+}
+
+func IgnoreNotFound(err error) error {
+	if errors.IsNotFound(err) {
+		return nil
+	}
+	return err
 }

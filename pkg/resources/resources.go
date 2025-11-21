@@ -2,60 +2,83 @@ package resources
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"strings"
 
 	"github.com/christophrj/openmcp-testing/internal"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/dynamic"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/e2e-framework/klient/decoder"
+	"sigs.k8s.io/e2e-framework/klient/k8s"
+	"sigs.k8s.io/e2e-framework/klient/wait"
+	"sigs.k8s.io/e2e-framework/klient/wait/conditions"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 )
 
-var (
-	ClusterproviderGVR     = schema.GroupVersionResource{Group: "openmcp.cloud", Version: "v1alpha1", Resource: "clusterproviders"}
-	ServiceProviderGVR     = schema.GroupVersionResource{Group: "openmcp.cloud", Version: "v1alpha1", Resource: "serviceproviders"}
-	ClusterGVR             = schema.GroupVersionResource{Group: "clusters.openmcp.cloud", Version: "v1alpha1", Resource: "clusters"}
-	ManagedControlPlaneGVR = schema.GroupVersionResource{Group: "core.openmcp.cloud", Version: "v2alpha1", Resource: "managedcontrolplanev2s"}
-)
+func DeleteObject(ctx context.Context, c *envconf.Config, obj k8s.Object, options ...wait.Option) error {
+	err := c.Client().Resources().Get(ctx, obj.GetName(), obj.GetNamespace(), obj)
+	if err != nil {
+		return internal.IgnoreNotFound(err)
+	}
+	if err = c.Client().Resources().Delete(ctx, obj); err != nil {
+		return internal.IgnoreNotFound(err)
+	}
+	if options != nil {
+		return wait.For(conditions.New(c.Client().Resources()).ResourceDeleted(obj), options...)
+	}
+	return nil
+}
 
-func GetObject(ctx context.Context, c *envconf.Config, ref types.NamespacedName, gvr schema.GroupVersionResource) (*unstructured.Unstructured, error) {
-	cl, err := dynamic.NewForConfig(c.Client().RESTConfig())
+func CreateObjectsFromTemplateFile(ctx context.Context, cfg *envconf.Config, filePath string, data interface{}) (*unstructured.UnstructuredList, error) {
+	manifest, err := internal.ExecTemplateFile(filePath, data)
 	if err != nil {
 		return nil, err
 	}
-	res := cl.Resource(gvr)
-	return res.Namespace(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+	return createObjectsFromManifest(ctx, cfg, manifest)
 }
 
-func DeleteObject(ctx context.Context, c *envconf.Config, ref types.NamespacedName, gvr schema.GroupVersionResource) error {
-	cl, err := dynamic.NewForConfig(c.Client().RESTConfig())
-	if err != nil {
-		return err
-	}
-	res := cl.Resource(gvr)
-	return res.Namespace(ref.Namespace).Delete(ctx, ref.Name, metav1.DeleteOptions{})
-}
-
-func CreateObjectsFromTemplateFile(ctx context.Context, cfg *envconf.Config, filePath string, data interface{}) error {
-	manifest, err := internal.ExecTemplateFile(filePath, data)
-	if err != nil {
-		return err
-	}
-	return CreateObjectsFromManifest(ctx, cfg, manifest)
-}
-
-func CreateObjectsFromTemplate(ctx context.Context, cfg *envconf.Config, template string, data interface{}) error {
+func CreateObjectFromTemplate(ctx context.Context, cfg *envconf.Config, template string, data interface{}) (*unstructured.Unstructured, error) {
 	manifest, err := internal.ExecTemplate(template, data)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return CreateObjectsFromManifest(ctx, cfg, manifest)
+	// TODO single creation
+	list, err := createObjectsFromManifest(ctx, cfg, manifest)
+	if err != nil {
+		return nil, err
+	}
+	if len(list.Items) < 1 {
+		return nil, fmt.Errorf("can't return object from empty list")
+	}
+	return &list.Items[0], nil
 }
 
-func CreateObjectsFromManifest(ctx context.Context, cfg *envconf.Config, manifest string) error {
+func createObjectsFromManifest(ctx context.Context, cfg *envconf.Config, manifest string) (*unstructured.UnstructuredList, error) {
 	r := strings.NewReader(manifest)
-	return decoder.DecodeEach(ctx, r, decoder.CreateIgnoreAlreadyExists(cfg.Client().Resources()), decoder.MutateNamespace(cfg.Namespace()))
+	list := &unstructured.UnstructuredList{}
+	err := decoder.DecodeEach(ctx, r,
+		func(ctx context.Context, obj k8s.Object) error {
+			return createAndPopulateList(ctx, obj, list, cfg)
+		}, decoder.MutateNamespace(cfg.Namespace()))
+	return list, err
+}
+
+func CreateObjectsFromDir(ctx context.Context, cfg *envconf.Config, dir string) (*unstructured.UnstructuredList, error) {
+	list := &unstructured.UnstructuredList{}
+	err := decoder.DecodeEachFile(ctx, os.DirFS(dir), "*",
+		func(ctx context.Context, obj k8s.Object) error {
+			return createAndPopulateList(ctx, obj, list, cfg)
+		}, decoder.MutateNamespace(cfg.Namespace()))
+	return list, err
+}
+
+func createAndPopulateList(ctx context.Context, obj k8s.Object, list *unstructured.UnstructuredList, cfg *envconf.Config) error {
+	u, err := internal.ToUnstructured(obj)
+	if err != nil {
+		return err
+	}
+	list.Items = append(list.Items, *u)
+	klog.Infof("creating object (%s) %s/%s", obj.GetObjectKind().GroupVersionKind(), obj.GetNamespace(), obj.GetName())
+	return decoder.CreateIgnoreAlreadyExists(cfg.Client().Resources())(ctx, obj)
 }
