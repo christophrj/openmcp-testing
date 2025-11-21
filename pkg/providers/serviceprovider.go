@@ -3,7 +3,6 @@ package providers
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/christophrj/openmcp-testing/pkg/clusterutils"
 	"github.com/christophrj/openmcp-testing/pkg/conditions"
@@ -56,10 +55,10 @@ func InstallServiceProvider(ctx context.Context, c *envconf.Config, sp ServicePr
 
 // ImportServiceProviderAPIs iterates over each resource from the passed in directory
 // and applies it to the onboarding cluster
-func ImportServiceProviderAPIs(directory string, timeout time.Duration) features.Func {
+func ImportServiceProviderAPIs(directory string, opts ...wait.Option) features.Func {
 	return func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 		klog.Infof("apply service provider resources to onboarding cluster from %s ...", directory)
-		if _, err := clusterutils.ImportToOnboardingCluster(ctx, directory, wait.WithTimeout(timeout)); err != nil {
+		if _, err := clusterutils.ImportToOnboardingCluster(ctx, directory, opts...); err != nil {
 			t.Error(err)
 		}
 		return ctx
@@ -68,10 +67,10 @@ func ImportServiceProviderAPIs(directory string, timeout time.Duration) features
 
 // ImportDomainAPIs iterates over each resource from the passed in directory
 // and applies it to a MCP cluster
-func ImportDomainAPIs(directory string, timeout time.Duration) features.Func {
+func ImportDomainAPIs(directory string, opts ...wait.Option) features.Func {
 	return func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 		klog.Infof("apply service provider resources to MCP cluster from %s ...", directory)
-		if _, err := clusterutils.ImportToMcpCluster(ctx, directory, wait.WithTimeout(timeout)); err != nil {
+		if _, err := clusterutils.ImportToMcpCluster(ctx, directory, opts...); err != nil {
 			t.Error(err)
 		}
 		return ctx

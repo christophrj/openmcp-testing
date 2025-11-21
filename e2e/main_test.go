@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/christophrj/openmcp-testing/pkg/providers"
 	"github.com/christophrj/openmcp-testing/pkg/setup"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/e2e-framework/klient/wait"
 	"sigs.k8s.io/e2e-framework/pkg/env"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 )
@@ -29,12 +31,18 @@ func TestMain(m *testing.M) {
 			{
 				Name:  "kind",
 				Image: "ghcr.io/openmcp-project/images/cluster-provider-kind:v0.0.15",
+				Opts: []wait.Option{
+					wait.WithTimeout(time.Minute),
+				},
 			},
 		},
 		ServiceProviders: []providers.ServiceProviderSetup{
 			{
 				Name:  "crossplane",
 				Image: "ghcr.io/openmcp-project/images/service-provider-crossplane:v0.0.4",
+				Opts: []wait.Option{
+					wait.WithTimeout(time.Minute),
+				},
 			},
 		},
 	}

@@ -88,7 +88,7 @@ func InstallClusterProvider(ctx context.Context, c *envconf.Config, clusterProvi
 
 // DeleteClusterProvider deletes the cluster provider object and waits until the object has been deleted
 func DeleteClusterProvider(ctx context.Context, c *envconf.Config, name string, opts ...wait.Option) error {
-	klog.Infof("delete service provider: %s", name)
+	klog.Infof("delete cluster provider: %s", name)
 	return resources.DeleteObject(ctx, c, clusterProviderRef(name), opts...)
 }
 
@@ -117,7 +117,7 @@ func CreateMCP(name string, timeout time.Duration) features.Func {
 }
 
 // DeleteMCP deletes the MCP object on the onboarding cluster and waits until the object has been deleted
-func DeleteMCP(name string, timeout time.Duration) features.Func {
+func DeleteMCP(name string, opts ...wait.Option) features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 		klog.Infof("delete MCP: %s", name)
 		onboardingCfg, err := clusterutils.OnboardingConfig()
@@ -129,7 +129,7 @@ func DeleteMCP(name string, timeout time.Duration) features.Func {
 			Namespace: corev1.NamespaceDefault,
 			Name:      name,
 		})
-		err = resources.DeleteObject(ctx, onboardingCfg, mcp, wait.WithTimeout(timeout))
+		err = resources.DeleteObject(ctx, onboardingCfg, mcp, opts...)
 		if err != nil {
 			t.Errorf("failed to delete MCP %s: %v", name, err)
 			return ctx

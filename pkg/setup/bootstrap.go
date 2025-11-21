@@ -60,13 +60,16 @@ func (s *OpenMCPSetup) cleanup() types.EnvFunc {
 				klog.Errorf("delete service provider failed: %v", err)
 			}
 		}
+		if err := providers.DeleteCluster(ctx, c, apimachinerytypes.NamespacedName{Namespace: s.Namespace, Name: "onboarding"},
+			wait.WithTimeout(time.Second*20)); err != nil {
+			klog.Errorf("delete cluster failed: %v", err)
+		}
 		for _, cp := range s.ClusterProviders {
 			if err := providers.DeleteClusterProvider(ctx, c, cp.Name, wait.WithTimeout(time.Minute)); err != nil {
 				klog.Errorf("delete cluster provider failed: %v", err)
 			}
 		}
-		return ctx, providers.DeleteCluster(ctx, c, apimachinerytypes.NamespacedName{Namespace: s.Namespace, Name: "onboarding"},
-			wait.WithTimeout(time.Second*10))
+		return ctx, nil
 	}
 }
 
