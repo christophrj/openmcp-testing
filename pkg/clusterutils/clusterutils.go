@@ -1,12 +1,17 @@
 package clusterutils
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
+	"github.com/christophrj/openmcp-testing/pkg/resources"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/e2e-framework/klient"
+	"sigs.k8s.io/e2e-framework/klient/wait"
+	"sigs.k8s.io/e2e-framework/klient/wait/conditions"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 	"sigs.k8s.io/kind/pkg/cluster"
 )
@@ -61,4 +66,35 @@ func retrieveKindClusterNameByPrefix(prefix string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no cluster found with prefix %s", prefix)
+}
+
+// ImportToOnboardingCluster applies a set of resources from a directory to the onboarding cluster
+func ImportToOnboardingCluster(ctx context.Context, dir string, options ...wait.Option) (*unstructured.UnstructuredList, error) {
+	c, err := OnboardingConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve onboarding cluster config: %v", err)
+	}
+	return importFromDir(ctx, c, dir, options...)
+}
+
+// ImportToMcpCluster applies a set of resources from a directory to the mcp cluster
+func ImportToMcpCluster(ctx context.Context, dir string, options ...wait.Option) (*unstructured.UnstructuredList, error) {
+	c, err := McpConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve mcp cluster config: %v", err)
+	}
+	return importFromDir(ctx, c, dir, options...)
+}
+
+func importFromDir(ctx context.Context, c *envconf.Config, dir string, options ...wait.Option) (*unstructured.UnstructuredList, error) {
+	objList, err := resources.CreateObjectsFromDir(ctx, c, dir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create objects from %s: %v", dir, err)
+	}
+	if options != nil {
+		if err := wait.For(conditions.New(c.Client().Resources()).ResourcesFound(objList), options...); err != nil {
+			return nil, err
+		}
+	}
+	return objList, nil
 }

@@ -1,12 +1,14 @@
 package e2e
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"testing"
 
 	"github.com/christophrj/openmcp-testing/pkg/providers"
 	"github.com/christophrj/openmcp-testing/pkg/setup"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/e2e-framework/pkg/env"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 )
@@ -14,6 +16,7 @@ import (
 var testenv env.Environment
 
 func TestMain(m *testing.M) {
+	initLogging()
 	openmcp := setup.OpenMCPSetup{
 		Namespace: "openmcp-system",
 		Operator: setup.OpenMCPOperatorSetup{
@@ -22,13 +25,17 @@ func TestMain(m *testing.M) {
 			Environment:  "debug",
 			PlatformName: "platform",
 		},
-		ClusterProvider: providers.CluterProviderSetup{
-			Name:  "kind",
-			Image: "ghcr.io/openmcp-project/images/cluster-provider-kind:v0.0.15",
+		ClusterProviders: []providers.ClusterProviderSetup{
+			{
+				Name:  "kind",
+				Image: "ghcr.io/openmcp-project/images/cluster-provider-kind:v0.0.15",
+			},
 		},
-		ServiceProvider: providers.ServiceProviderSetup{
-			Name:  "crossplane",
-			Image: "ghcr.io/openmcp-project/images/service-provider-crossplane:v0.0.4",
+		ServiceProviders: []providers.ServiceProviderSetup{
+			{
+				Name:  "crossplane",
+				Image: "ghcr.io/openmcp-project/images/service-provider-crossplane:v0.0.4",
+			},
 		},
 	}
 	testenv = env.NewWithConfig(envconf.New().WithNamespace(openmcp.Namespace))
@@ -36,4 +43,12 @@ func TestMain(m *testing.M) {
 		panic(fmt.Errorf("openmcp bootstrap failed: %v", err))
 	}
 	os.Exit(testenv.Run(m))
+}
+
+func initLogging() {
+	klog.InitFlags(nil)
+	if err := flag.Set("v", "2"); err != nil {
+		panic(err)
+	}
+	flag.Parse()
 }

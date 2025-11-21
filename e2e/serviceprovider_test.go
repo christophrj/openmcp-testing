@@ -13,7 +13,7 @@ import (
 func TestServiceProvider(t *testing.T) {
 	basicProviderTest := features.New("provider test").
 		Setup(providers.CreateMCP("test-mcp", time.Minute)).
-		Setup(providers.ImportServiceProviderAPIs("spobjects", time.Minute)).
+		Setup(providers.ImportServiceProviderAPIs("serviceproviderobjects", time.Minute)).
 		Setup(providers.ImportDomainAPIs("domainobjects", time.Minute)).
 		Assess("verify API status conditions", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 			return ctx

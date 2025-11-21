@@ -13,13 +13,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/e2e-framework/klient/wait"
-	e2efwconditions "sigs.k8s.io/e2e-framework/klient/wait/conditions"
-	"sigs.k8s.io/e2e-framework/pkg/env"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 	"sigs.k8s.io/e2e-framework/pkg/features"
 )
 
-const spTemplate = `
+const serviceProviderTemplate = `
 apiVersion: openmcp.cloud/v1alpha1
 kind: ServiceProvider
 metadata:
@@ -28,9 +26,11 @@ spec:
   image: {{.Image}}
 `
 
+// ServiceProviderSetup represents the configuration parameters to set up a service provider
 type ServiceProviderSetup struct {
 	Name  string
 	Image string
+	Opts  []wait.Option
 }
 
 func serviceProviderRef(name string) *unstructured.Unstructured {
@@ -45,15 +45,13 @@ func serviceProviderRef(name string) *unstructured.Unstructured {
 }
 
 // InstallServiceProvider creates a service provider object on the platform cluster and waits until it is ready
-func InstallServiceProvider(opts ServiceProviderSetup, timeout time.Duration) env.Func {
-	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
-		klog.Infof("create service provider: %s", opts.Name)
-		obj, err := resources.CreateObjectFromTemplate(ctx, c, spTemplate, opts)
-		if err != nil {
-			return ctx, err
-		}
-		return ctx, wait.For(conditions.Match(obj, c, "Ready", corev1.ConditionTrue), wait.WithTimeout(timeout))
+func InstallServiceProvider(ctx context.Context, c *envconf.Config, sp ServiceProviderSetup) error {
+	klog.Infof("create service provider: %s", sp.Name)
+	obj, err := resources.CreateObjectFromTemplate(ctx, c, serviceProviderTemplate, sp)
+	if err != nil {
+		return err
 	}
+	return wait.For(conditions.Match(obj, c, "Ready", corev1.ConditionTrue), sp.Opts...)
 }
 
 // ImportServiceProviderAPIs iterates over each resource from the passed in directory
@@ -61,16 +59,7 @@ func InstallServiceProvider(opts ServiceProviderSetup, timeout time.Duration) en
 func ImportServiceProviderAPIs(directory string, timeout time.Duration) features.Func {
 	return func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 		klog.Infof("apply service provider resources to onboarding cluster from %s ...", directory)
-		c, err := clusterutils.OnboardingConfig()
-		if err != nil {
-			t.Errorf("failed to retrieve onboarding cluster config: %v", err)
-			return ctx
-		}
-		objList, err := resources.CreateObjectsFromDir(ctx, c, directory)
-		if err != nil {
-			t.Errorf("failed to create objects from %s: %v", directory, err)
-		}
-		if err := wait.For(e2efwconditions.New(c.Client().Resources()).ResourcesFound(objList)); err != nil {
+		if _, err := clusterutils.ImportToOnboardingCluster(ctx, directory, wait.WithTimeout(timeout)); err != nil {
 			t.Error(err)
 		}
 		return ctx
@@ -82,16 +71,7 @@ func ImportServiceProviderAPIs(directory string, timeout time.Duration) features
 func ImportDomainAPIs(directory string, timeout time.Duration) features.Func {
 	return func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 		klog.Infof("apply service provider resources to MCP cluster from %s ...", directory)
-		c, err := clusterutils.McpConfig()
-		if err != nil {
-			t.Errorf("failed to retrieve MCP cluster config: %v", err)
-			return ctx
-		}
-		objList, err := resources.CreateObjectsFromDir(ctx, c, directory)
-		if err != nil {
-			t.Errorf("failed to create objects from %s: %v", directory, err)
-		}
-		if err := wait.For(e2efwconditions.New(c.Client().Resources()).ResourcesFound(objList)); err != nil {
+		if _, err := clusterutils.ImportToMcpCluster(ctx, directory, wait.WithTimeout(timeout)); err != nil {
 			t.Error(err)
 		}
 		return ctx
@@ -99,9 +79,7 @@ func ImportDomainAPIs(directory string, timeout time.Duration) features.Func {
 }
 
 // DeleteServiceProvider deletes the service provider object on the platform cluster and waits until the object has been deleted
-func DeleteServiceProvider(opts ServiceProviderSetup, timeout time.Duration) env.Func {
-	return func(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
-		klog.Infof("delete service provider: %s", opts.Name)
-		return ctx, resources.DeleteObject(ctx, cfg, serviceProviderRef(opts.Name), wait.WithTimeout(time.Minute))
-	}
+func DeleteServiceProvider(ctx context.Context, c *envconf.Config, name string, opts ...wait.Option) error {
+	klog.Infof("delete service provider: %s", name)
+	return resources.DeleteObject(ctx, c, serviceProviderRef(name), opts...)
 }

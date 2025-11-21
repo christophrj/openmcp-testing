@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/christophrj/openmcp-testing/internal"
 	"github.com/christophrj/openmcp-testing/pkg/clusterutils"
 	"github.com/christophrj/openmcp-testing/pkg/conditions"
 	"github.com/christophrj/openmcp-testing/pkg/resources"
@@ -14,12 +15,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/e2e-framework/klient/wait"
-	"sigs.k8s.io/e2e-framework/pkg/env"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 	"sigs.k8s.io/e2e-framework/pkg/features"
 )
 
-const cpTemplate = `
+const clusterProviderTemplate = `
 apiVersion: openmcp.cloud/v1alpha1
 kind: ClusterProvider
 metadata:
@@ -45,48 +45,51 @@ spec:
   iam: {}
 `
 
-type CluterProviderSetup struct {
+// ClusterProviderSetup represents the configuration parameters to set up a cluster provider
+type ClusterProviderSetup struct {
 	Name  string
 	Image string
+	Opts  []wait.Option
 }
 
 func mcpRef(ref types.NamespacedName) *unstructured.Unstructured {
-	obj := &unstructured.Unstructured{}
-	obj.SetName(ref.Name)
-	obj.SetNamespace(ref.Namespace)
-	obj.SetGroupVersionKind(schema.GroupVersionKind{
+	return internal.UnstructuredRef(ref.Name, ref.Namespace, schema.GroupVersionKind{
 		Group:   "core.openmcp.cloud",
 		Version: "v2alpha1",
 		Kind:    "managedcontrolplanev2",
 	})
-	return obj
 }
 
 func clusterRef(ref types.NamespacedName) *unstructured.Unstructured {
-	obj := &unstructured.Unstructured{}
-	obj.SetName(ref.Name)
-	obj.SetNamespace(ref.Namespace)
-	obj.SetGroupVersionKind(schema.GroupVersionKind{
+	return internal.UnstructuredRef(ref.Name, ref.Namespace, schema.GroupVersionKind{
 		Group:   "clusters.openmcp.cloud",
 		Version: "v1alpha1",
 		Kind:    "cluster",
 	})
-	return obj
+}
+
+func clusterProviderRef(name string) *unstructured.Unstructured {
+	return internal.UnstructuredRef(name, "", schema.GroupVersionKind{
+		Group:   "openmcp.cloud",
+		Version: "v1alpha1",
+		Kind:    "clusterprovider",
+	})
 }
 
 // InstallClusterProvider creates a cluster provider object on the platform cluster and waits until it is ready
-func InstallClusterProvider(opts CluterProviderSetup, timeout time.Duration) env.Func {
-	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
-		klog.Infof("create cluster provider %s", opts.Name)
-		obj, err := resources.CreateObjectFromTemplate(ctx, c, cpTemplate, opts)
-		if err != nil {
-			return ctx, err
-		}
-		return ctx, wait.For(
-			conditions.Match(obj, c, "Ready", corev1.ConditionTrue),
-			wait.WithTimeout(timeout),
-		)
+func InstallClusterProvider(ctx context.Context, c *envconf.Config, clusterProvider ClusterProviderSetup) error {
+	klog.Infof("create cluster provider %s", clusterProvider.Name)
+	obj, err := resources.CreateObjectFromTemplate(ctx, c, clusterProviderTemplate, clusterProvider)
+	if err != nil {
+		return err
 	}
+	return wait.For(conditions.Match(obj, c, "Ready", corev1.ConditionTrue), clusterProvider.Opts...)
+}
+
+// DeleteClusterProvider deletes the cluster provider object and waits until the object has been deleted
+func DeleteClusterProvider(ctx context.Context, c *envconf.Config, name string, opts ...wait.Option) error {
+	klog.Infof("delete service provider: %s", name)
+	return resources.DeleteObject(ctx, c, clusterProviderRef(name), opts...)
 }
 
 // CreateMCP creates an MCP object on the onboarding cluster and waits until it is ready
@@ -135,6 +138,7 @@ func DeleteMCP(name string, timeout time.Duration) features.Func {
 	}
 }
 
+// ClusterReady returns true if the referenced cluster object is ready
 func ClusterReady(ctx context.Context, c *envconf.Config, ref types.NamespacedName, options ...wait.Option) error {
 	if err := wait.For(conditions.Match(clusterRef(ref), c, "Ready", corev1.ConditionTrue), options...); err != nil {
 		return err
@@ -143,6 +147,7 @@ func ClusterReady(ctx context.Context, c *envconf.Config, ref types.NamespacedNa
 	return nil
 }
 
+// DeleteCluster deletes the referenced cluster object
 func DeleteCluster(ctx context.Context, c *envconf.Config, ref types.NamespacedName, options ...wait.Option) error {
 	klog.Infof("delete cluster: %s", ref)
 	return resources.DeleteObject(ctx, c, clusterRef(ref), options...)
