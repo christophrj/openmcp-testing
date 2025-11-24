@@ -2,7 +2,6 @@ package resources
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"strings"
 
@@ -16,6 +15,7 @@ import (
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 )
 
+// DeleteObject deletes the passed in object if it exists
 func DeleteObject(ctx context.Context, c *envconf.Config, obj k8s.Object, options ...wait.Option) error {
 	err := c.Client().Resources().Get(ctx, obj.GetName(), obj.GetNamespace(), obj)
 	if err != nil {
@@ -30,6 +30,7 @@ func DeleteObject(ctx context.Context, c *envconf.Config, obj k8s.Object, option
 	return nil
 }
 
+// CreateObjectsFromTemplateFile creates objects by first applying the passed data to a template file on the file system
 func CreateObjectsFromTemplateFile(ctx context.Context, cfg *envconf.Config, filePath string, data interface{}) (*unstructured.UnstructuredList, error) {
 	manifest, err := internal.ExecTemplateFile(filePath, data)
 	if err != nil {
@@ -38,20 +39,22 @@ func CreateObjectsFromTemplateFile(ctx context.Context, cfg *envconf.Config, fil
 	return createObjectsFromManifest(ctx, cfg, manifest)
 }
 
+// CreateObjectFromTemplate creates a single object by first applying the passed in data to a template
 func CreateObjectFromTemplate(ctx context.Context, cfg *envconf.Config, template string, data interface{}) (*unstructured.Unstructured, error) {
 	manifest, err := internal.ExecTemplate(template, data)
 	if err != nil {
 		return nil, err
 	}
-	// TODO single creation
-	list, err := createObjectsFromManifest(ctx, cfg, manifest)
+	obj := &unstructured.Unstructured{}
+	err = decoder.DecodeString(manifest, obj, decoder.MutateNamespace(cfg.Namespace()))
 	if err != nil {
 		return nil, err
 	}
-	if len(list.Items) < 1 {
-		return nil, fmt.Errorf("can't return object from empty list")
+	err = cfg.Client().Resources().Create(ctx, obj)
+	if err != nil {
+		return nil, err
 	}
-	return &list.Items[0], nil
+	return obj, nil
 }
 
 func createObjectsFromManifest(ctx context.Context, cfg *envconf.Config, manifest string) (*unstructured.UnstructuredList, error) {
@@ -64,6 +67,7 @@ func createObjectsFromManifest(ctx context.Context, cfg *envconf.Config, manifes
 	return list, err
 }
 
+// CreateObjectsFromDir creates objects specified by a file on the file system
 func CreateObjectsFromDir(ctx context.Context, cfg *envconf.Config, dir string) (*unstructured.UnstructuredList, error) {
 	list := &unstructured.UnstructuredList{}
 	err := decoder.DecodeEachFile(ctx, os.DirFS(dir), "*",
